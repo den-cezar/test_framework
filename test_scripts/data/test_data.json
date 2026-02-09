@@ -1,0 +1,8 @@
+{
+  "ui": {
+    "google_queries": ["playwright python", "github api testing"]
+  },
+  "api": {
+    "public_health_url": "https://www.githubstatus.com/api/v2/status.json"
+  }
+}
