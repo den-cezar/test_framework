@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+**/.idea
+/.vscode/
+*.pyc
+**/pytest.ini
+**/pytest.*
+__pycache__
+.env.*
+
+/.venv/
+/.artifacts/
+/.cache/
