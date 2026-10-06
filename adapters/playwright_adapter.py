@@ -4,40 +4,70 @@ Playwright adapter for UI interactions.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from playwright.sync_api import Locator, Page
 
 from core.logging.logger import Logger
+
+logger = Logger.get_logger("PlaywrightAdapter")
 
 
 class PlaywrightAdapter:
     """
-    Adapter wrapper for Playwright interactions.
+    Thin wrapper over a Playwright page that resolves paths against UI_BASE_URL.
     """
 
-    def __init__(self, page_value: Any) -> None:
+    def __init__(self, page: Page, base_url: str) -> None:
         """
         Initialize the Playwright adapter.
 
-        :param page_value: Mandatory, Playwright page instance.
+        :param page: Mandatory, Playwright page instance.
+        :param base_url: Mandatory, Base URL of the UI under test.
         """
-        logger = Logger.get_logger("PlaywrightAdapter")
-        logger.debug("Initializing Playwright adapter.")
+        self.page = page
+        self.base_url = base_url.rstrip("/")
 
-        if page_value is None:
-            raise ValueError("page_value must be provided.")
-        self.page = page_value
-
-    def capture_screenshot(self, path_value: Path) -> None:
+    def open(self, path_value: str = "/") -> None:
         """
-        Capture a screenshot to the specified path.
+        Navigate to a path under the base URL.
 
-        :param path_value: Mandatory, Path to save the screenshot.
+        :param path_value: Optional, Path relative to the base URL.
         """
-        logger = Logger.get_logger("PlaywrightAdapter")
-        logger.debug("Capturing screenshot.")
+        url_value = f"{self.base_url}/{path_value.lstrip('/')}"
+        logger.info("Opening %s", url_value)
+        self.page.goto(url_value, wait_until="domcontentloaded")
 
-        if not isinstance(path_value, Path):
-            raise ValueError("path_value must be a Path.")
+    def title(self) -> str:
+        """
+        Get the document title.
 
-        self.page.screenshot(path=str(path_value))
+        :return: Page title.
+        """
+        return self.page.title()
+
+    def by_test_id(self, test_id: str) -> Locator:
+        """
+        Locate elements by their data-testid attribute.
+
+        :param test_id: Mandatory, Test id value.
+        :return: Locator.
+        """
+        return self.page.get_by_test_id(test_id)
+
+    def by_placeholder(self, text: str) -> Locator:
+        """
+        Locate an input by its placeholder text.
+
+        :param text: Mandatory, Placeholder text.
+        :return: Locator.
+        """
+        return self.page.get_by_placeholder(text)
+
+    def by_role(self, role: str, name: str) -> Locator:
+        """
+        Locate an element by ARIA role and accessible name.
+
+        :param role: Mandatory, ARIA role (e.g. "link", "button").
+        :param name: Mandatory, Accessible name.
+        :return: Locator.
+        """
+        return self.page.get_by_role(role, name=name)  # type: ignore[arg-type]

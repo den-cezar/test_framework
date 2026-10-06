@@ -1,0 +1,38 @@
+name: Feature request
+description: Propose a framework capability, new test coverage, or CI improvement.
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Framework core (config, auth, logging, artifacts, reporting)
+        - API layer (HttpClient, ApiService)
+        - UI layer (Playwright adapter, page objects)
+        - Test coverage (new tests or suites)
+        - CI / workflows
+        - Documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you cannot do today, or what is slow or error-prone.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The change you suggest, and which layer it belongs in.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

@@ -10,32 +10,31 @@ from typing import Any
 import httpx
 
 from core.auth.token_cache import SharedTokenCache, TokenRecord
-from core.config.settings import FrameworkSettings
+from core.config.settings import FrameworkSettings, OAuthClientConfig
+from core.errors import AuthError
 from core.logging.logger import Logger
+
+logger = Logger.get_logger("OAuth")
 
 
 class OAuthClient:
     """
-    OAuth client for fetching access tokens.
+    OAuth client-credentials flow backed by the shared token cache.
     """
 
-    def __init__(self, settings: FrameworkSettings, token_cache: SharedTokenCache) -> None:
+    def __init__(
+        self, settings: FrameworkSettings, token_cache: SharedTokenCache, http: httpx.Client | None = None
+    ) -> None:
         """
         Initialize the OAuth client.
 
         :param settings: Mandatory, Framework settings.
         :param token_cache: Mandatory, Shared token cache instance.
+        :param http: Optional, HTTP client for the token endpoint (injected in unit tests).
         """
-        self.logger = Logger.get_logger("OAuth")
-        self.logger.debug("Initializing OAuth client.")
-
-        if not isinstance(settings, FrameworkSettings):
-            raise ValueError("settings must be a FrameworkSettings instance.")
-        if not isinstance(token_cache, SharedTokenCache):
-            raise ValueError("token_cache must be a SharedTokenCache instance.")
-
         self.settings = settings
         self.token_cache = token_cache
+        self.http = http or httpx.Client(timeout=settings.http_timeout_seconds)
 
     def get_access_token(self, scope_value: str | None = None, client_name: str | None = None) -> str:
         """
@@ -45,19 +44,17 @@ class OAuthClient:
         :param client_name: Optional, Override OAuth client name.
         :return: Access token string.
         """
-        self.logger.debug("Fetching OAuth access token.")
-
         resolved_name, client_config = self.settings.resolve_oauth_client(client_name)
         resolved_scope = scope_value or client_config.scope
-
         cache_key = self._build_cache_key(resolved_name, client_config.client_id, resolved_scope)
-        cached_token = self.token_cache.get_token(cache_key)
-        if cached_token and not cached_token.is_expired():
-            return cached_token.access_token
+        record = self.token_cache.get_or_create(cache_key, lambda: self._request_token(client_config, resolved_scope))
+        return record.access_token
 
-        token_record = self._request_token(client_config, resolved_scope)
-        self.token_cache.set_token(cache_key, token_record)
-        return token_record.access_token
+    def close(self) -> None:
+        """
+        Close the underlying HTTP client.
+        """
+        self.http.close()
 
     def _build_cache_key(self, client_name: str, client_id: str, scope_value: str | None) -> str:
         """
@@ -68,12 +65,9 @@ class OAuthClient:
         :param scope_value: Optional, OAuth scope for the token.
         :return: Cache key string.
         """
-        self.logger.debug("Building OAuth cache key.")
+        return f"{self.settings.env_name}:{client_name}:{client_id}:{scope_value or 'default'}"
 
-        scope_part = scope_value or "default"
-        return f"{self.settings.env_name}:{client_name}:{client_id}:{scope_part}"
-
-    def _request_token(self, client_config: Any, scope_value: str | None) -> TokenRecord:
+    def _request_token(self, client_config: OAuthClientConfig, scope_value: str | None) -> TokenRecord:
         """
         Request a new token from the OAuth server.
 
@@ -81,7 +75,7 @@ class OAuthClient:
         :param scope_value: Optional, OAuth scope for the token.
         :return: TokenRecord instance.
         """
-        self.logger.debug("Requesting new OAuth token.")
+        logger.info("Requesting OAuth token for client_id=%s scope=%s.", client_config.client_id, scope_value)
 
         payload = {
             "grant_type": "client_credentials",
@@ -91,15 +85,14 @@ class OAuthClient:
         if scope_value:
             payload["scope"] = scope_value
 
-        response = httpx.post(self.settings.oauth_token_url, data=payload, timeout=30)
-        if response.status_code >= 400:
-            raise RuntimeError(f"Token request failed: {response.status_code} {response.text}")
+        response = self.http.post(self.settings.oauth_token_url, data=payload)
+        if response.is_error:
+            raise AuthError(f"Token request failed: {response.status_code} {response.text}")
 
         token_json: dict[str, Any] = response.json()
         access_token = str(token_json.get("access_token", ""))
         expires_in = int(token_json.get("expires_in", 0))
         if not access_token or expires_in <= 0:
-            raise RuntimeError("Invalid token response from OAuth server.")
+            raise AuthError("Invalid token response from OAuth server.")
 
-        expires_at = time.time() + expires_in
-        return TokenRecord(access_token=access_token, expires_at=expires_at)
+        return TokenRecord(access_token=access_token, expires_at=time.time() + expires_in)

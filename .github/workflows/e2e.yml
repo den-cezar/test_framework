@@ -1,0 +1,134 @@
+name: E2E tests
+
+run-name: E2E ${{ inputs.suite || 'regression' }} on ${{ inputs.environment || 'dev' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Test set. "custom" uses the marker expression below; "all" runs everything under target.
+        type: choice
+        default: regression
+        options: [regression, smoke, api, ui, all, custom]
+      marker:
+        description: Marker expression for suite=custom, e.g. "api and not smoke".
+        type: string
+        default: ""
+      target:
+        description: Path, file or node id, e.g. test_scripts/api/test_identity.py::test_identity_endpoint_echoes_token_claims
+        type: string
+        default: test_scripts
+      environment:
+        description: GitHub environment that holds the test variables and secrets.
+        type: choice
+        default: dev
+        options: [dev]
+      workers:
+        description: pytest-xdist workers ("auto", a number, or 0 to disable).
+        type: string
+        default: auto
+  # Nightly regression, Monday to Friday, 03:00 UTC. Disabled for the demo project; uncomment to enable.
+  # schedule:
+  #   - cron: "0 3 * * 1-5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}-${{ inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    name: E2E ${{ inputs.suite || 'regression' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Use the environment's vars/secrets without creating a deployment record.
+    environment:
+      name: ${{ inputs.environment || 'dev' }}
+      deployment: false
+    # Inputs reach the shell only through env vars, never via ${{ }} inside run:, to prevent script injection.
+    env:
+      SUITE: ${{ inputs.suite || 'regression' }}
+      MARKER: ${{ inputs.marker }}
+      TARGET: ${{ inputs.target || 'test_scripts' }}
+      WORKERS: ${{ inputs.workers || 'auto' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          browsers: "true"
+
+      - name: Run tests
+        env:
+          TEST_SUMMARY_TITLE: E2E ${{ inputs.suite || 'regression' }} (${{ inputs.environment || 'dev' }})
+          # Framework settings from the GitHub environment: non-secret values in vars, credentials in secrets.
+          ENV_NAME: ${{ vars.ENV_NAME }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+          UI_BASE_URL: ${{ vars.UI_BASE_URL }}
+          OAUTH_TOKEN_URL: ${{ vars.OAUTH_TOKEN_URL }}
+          OAUTH_CLIENT_NAME_A: ${{ vars.OAUTH_CLIENT_NAME_A }}
+          OAUTH_CLIENT_ID_A: ${{ vars.OAUTH_CLIENT_ID_A }}
+          OAUTH_CLIENT_SECRET_A: ${{ secrets.OAUTH_CLIENT_SECRET_A }}
+          OAUTH_SCOPE_A: ${{ vars.OAUTH_SCOPE_A }}
+          OAUTH_CLIENT_NAME_B: ${{ vars.OAUTH_CLIENT_NAME_B }}
+          OAUTH_CLIENT_ID_B: ${{ vars.OAUTH_CLIENT_ID_B }}
+          OAUTH_CLIENT_SECRET_B: ${{ secrets.OAUTH_CLIENT_SECRET_B }}
+          OAUTH_SCOPE_B: ${{ vars.OAUTH_SCOPE_B }}
+          TOKEN_CACHE_PATH: ${{ vars.TOKEN_CACHE_PATH || '.cache/token_cache.json' }}
+          LOG_CONSOLE_LEVEL: ${{ vars.LOG_CONSOLE_LEVEL || 'INFO' }}
+          LOG_FILE_LEVEL: ${{ vars.LOG_FILE_LEVEL || 'DEBUG' }}
+          TIMEZONE: ${{ vars.TIMEZONE || 'UTC' }}
+          HTTP_TIMEOUT_SECONDS: ${{ vars.HTTP_TIMEOUT_SECONDS }}
+          PLAYWRIGHT_LAUNCH_ARGS: ${{ vars.PLAYWRIGHT_LAUNCH_ARGS }}
+        run: |
+          args=("$TARGET" -n "$WORKERS"
+                --junitxml=reports/junit.xml --html=reports/report.html --self-contained-html)
+          case "$SUITE" in
+            all) ;;
+            custom)
+              if [[ -z "$MARKER" ]]; then
+                echo "::error::suite=custom requires a marker expression."
+                exit 1
+              fi
+              args+=(-m "$MARKER") ;;
+            *) args+=(-m "$SUITE") ;;
+          esac
+          echo "pytest ${args[*]}"
+          poetry run pytest "${args[@]}"
+
+      - name: Upload reports and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-${{ inputs.suite || 'regression' }}-${{ github.run_number }}
+          path: |
+            reports/
+            .artifacts/
+            !.artifacts/**/*_trace.zip
+          include-hidden-files: true
+          retention-days: 14
+
+      # Traces exist only for failed UI tests; API-only failures upload nothing.
+      - name: Upload Playwright traces
+        id: traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-traces-${{ github.run_number }}
+          path: .artifacts/**/*_trace.zip
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Link traces in job summary
+        if: failure() && steps.traces.outputs.artifact-url != ''
+        env:
+          ARTIFACT_URL: ${{ steps.traces.outputs.artifact-url }}
+        run: |
+          {
+            echo "#### Playwright traces"
+            echo "[Download traces]($ARTIFACT_URL), unzip, then open a \`*_trace.zip\` at https://trace.playwright.dev or with \`poetry run playwright show-trace <zip>\`."
+            echo "Failed tests with a trace:"
+            find .artifacts -name '*_trace.zip' | sed -E 's|^\.artifacts/[^/]+/([^/]+)/.*|- `\1`|' | sort -u
+          } >> "$GITHUB_STEP_SUMMARY"

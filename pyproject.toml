@@ -12,21 +12,83 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-pytest = "^9.0.2"
-pytest-xdist = "^3.6.1"
-python-dotenv = "^1.0.1"
-filelock = "^3.15.4"
+pytest = "^9.1.1"
+pytest-xdist = "^3.8.0"
+python-dotenv = "^1.2.4"
+filelock = "^4.0.12"
 httpx = "^0.28.1"
-playwright = "^1.49.0"
-poetry-core = ">=1.8.0"
+playwright = "^1.63.0"
+pytest-html = "^4.2.0"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.6.9"
-pre-commit = "^3.7.1"
+ruff = "^0.16.10"
+pre-commit = "^4.6.2"
+poethepoet = "^0.48.0"
+mypy = "^2.4.0"
+pytest-cov = "^7.1.0"
+
+# Run with `poetry run poe <task>`; extra args are forwarded, e.g. `poe test-api --env-file .env.dev -k identity`.
+[tool.poe.tasks]
+# Project setup (run `poetry install` first)
+install-browsers = { cmd = "playwright install chromium", help = "Install the Playwright Chromium browser" }
+install-hooks = { cmd = "pre-commit install", help = "Install git pre-commit hooks" }
+setup = { sequence = ["install-browsers", "install-hooks"], help = "Install browsers and git hooks" }
+
+# Test sets
+test = { cmd = "pytest", help = "Run unit and end-to-end tests" }
+test-unit = { cmd = "pytest tests/unit --cov", help = "Run framework unit tests with coverage (no env file needed)" }
+test-e2e = { cmd = "pytest test_scripts", help = "Run all end-to-end tests" }
+test-smoke = { cmd = "pytest test_scripts -m smoke", help = "Run the smoke suite" }
+test-regression = { cmd = "pytest test_scripts -m regression -n auto", help = "Run the regression suite in parallel" }
+test-api = { cmd = "pytest test_scripts -m api", help = "Run API tests" }
+test-ui = { cmd = "pytest test_scripts -m ui", help = "Run UI tests" }
+test-parallel = { cmd = "pytest test_scripts -n auto", help = "Run all end-to-end tests in parallel (pytest-xdist)" }
+test-api-parallel = { cmd = "pytest test_scripts -m api -n auto", help = "Run API tests in parallel" }
+test-ui-parallel = { cmd = "pytest test_scripts -m ui -n auto", help = "Run UI tests in parallel" }
+
+# Code quality
+lint = { cmd = "ruff check .", help = "Lint with ruff" }
+format = { cmd = "ruff format .", help = "Format with ruff" }
+typecheck = { cmd = "mypy", help = "Type-check with mypy" }
+check = { sequence = ["lint", { cmd = "ruff format --check ." }, "typecheck"], help = "Lint, verify formatting, type-check" }
 
 [build-system]
 requires = ["poetry-core>=1.8.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests", "test_scripts"]
+pythonpath = ["."]
+addopts = ["--strict-markers", "--strict-config", "-ra", "--import-mode=importlib"]
+xfail_strict = true
+markers = [
+  "api: API test",
+  "ui: UI test (Playwright)",
+  "smoke: fast critical-path check, safe to run on every deploy",
+  "regression: part of the full regression suite",
+]
+
+[tool.coverage.run]
+# Unit-test scope; domain/ and the Playwright adapter are exercised by the e2e suites.
+source = ["core", "adapters"]
+omit = ["adapters/playwright_adapter.py"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 90
+
+[tool.mypy]
+python_version = "3.11"
+files = ["conftest.py", "core", "adapters", "domain", "test_scripts", "tests"]
+strict = true
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["pytest_html"]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 120
