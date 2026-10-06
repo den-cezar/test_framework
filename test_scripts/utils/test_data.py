@@ -17,3 +17,13 @@ def load_test_data() -> dict[str, Any]:
     :return: Test data mapping.
     """
     return load_json(DATA_ROOT.joinpath("test_data.json"))
+
+
+def load_json_file(file_name: str) -> dict[str, Any]:
+    """
+    Load a JSON file from test_scripts/data.
+
+    :param file_name: Mandatory, File name inside the data folder.
+    :return: Parsed mapping.
+    """
+    return load_json(DATA_ROOT.joinpath(file_name))

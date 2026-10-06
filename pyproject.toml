@@ -19,6 +19,9 @@ filelock = "^4.0.12"
 httpx = "^0.28.1"
 playwright = "^1.63.0"
 pytest-html = "^4.2.0"
+pydantic = "^2.13.5"
+pytest-rerunfailures = "^16.7"
+axe-playwright-python = "^0.1.8"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.16.10"
@@ -26,11 +29,16 @@ pre-commit = "^4.6.2"
 poethepoet = "^0.48.0"
 mypy = "^2.4.0"
 pytest-cov = "^7.1.0"
+hypothesis = "^6.168.5"
+mutmut = "^3.8.0"
+pip-audit = "^2.10.1"
+zizmor = "^1.30.1"
 
 # Run with `poetry run poe <task>`; extra args are forwarded, e.g. `poe test-api --env-file .env.dev -k identity`.
 [tool.poe.tasks]
 # Project setup (run `poetry install` first)
 install-browsers = { cmd = "playwright install chromium", help = "Install the Playwright Chromium browser" }
+install-all-browsers = { cmd = "playwright install chromium firefox webkit", help = "Install all Playwright browsers" }
 install-hooks = { cmd = "pre-commit install", help = "Install git pre-commit hooks" }
 setup = { sequence = ["install-browsers", "install-hooks"], help = "Install browsers and git hooks" }
 
@@ -50,7 +58,12 @@ test-ui-parallel = { cmd = "pytest test_scripts -m ui -n auto", help = "Run UI t
 lint = { cmd = "ruff check .", help = "Lint with ruff" }
 format = { cmd = "ruff format .", help = "Format with ruff" }
 typecheck = { cmd = "mypy", help = "Type-check with mypy" }
-check = { sequence = ["lint", { cmd = "ruff format --check ." }, "typecheck"], help = "Lint, verify formatting, type-check" }
+traceability = { cmd = "pytest test_scripts --collect-only -q --require-full-traceability", help = "Every requirement has a test and every e2e test has a known scenario" }
+check = { sequence = ["lint", { cmd = "ruff format --check ." }, "typecheck", "traceability"], help = "Lint, format check, type-check, traceability" }
+mutation = { shell = "mutmut run --max-children 4; mutmut export-cicd-stats && python -m tools.mutation_score --min-score 80", help = "Mutation-test core/ and enforce the minimum score" }
+audit = { cmd = "pip-audit --skip-editable", help = "Check installed dependencies for known vulnerabilities" }
+lint-workflows = { cmd = "zizmor .github", help = "Security-lint GitHub workflows (zizmor)" }
+show-trace = { cmd = "playwright show-trace --host 0.0.0.0 --port 9323", help = "Open a Playwright trace in the browser-based viewer (port 9323)" }
 
 [build-system]
 requires = ["poetry-core>=1.8.0"]
@@ -62,12 +75,25 @@ testpaths = ["tests", "test_scripts"]
 pythonpath = ["."]
 addopts = ["--strict-markers", "--strict-config", "-ra", "--import-mode=importlib"]
 xfail_strict = true
+requirements_catalog = "test_scripts/data/requirements.json"
 markers = [
   "api: API test",
   "ui: UI test (Playwright)",
+  "hybrid: API and UI in one test",
+  "contract: response validated against a schema/model",
+  "security: authentication/authorization negative test",
+  "network: UI test with mocked or faulty network",
+  "a11y: accessibility scan",
   "smoke: fast critical-path check, safe to run on every deploy",
   "regression: part of the full regression suite",
+  "scenario(id): requirement id from test_scripts/data/requirements.json (required for e2e tests)",
+  "quarantine(reason): known-flaky test, runs outside the blocking gate; reason must link an issue",
 ]
+
+[tool.mutmut]
+paths_to_mutate = ["core/"]
+tests_dir = ["tests/unit/"]
+also_copy = ["conftest.py", "pyproject.toml", "adapters/"]
 
 [tool.coverage.run]
 # Unit-test scope; domain/ and the Playwright adapter are exercised by the e2e suites.
@@ -82,12 +108,12 @@ fail_under = 90
 
 [tool.mypy]
 python_version = "3.11"
-files = ["conftest.py", "core", "adapters", "domain", "test_scripts", "tests"]
+files = ["conftest.py", "core", "adapters", "domain", "test_scripts", "tests", "tools"]
 strict = true
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-module = ["pytest_html"]
+module = ["pytest_html", "axe_playwright_python.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

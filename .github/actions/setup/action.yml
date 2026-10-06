@@ -1,13 +1,13 @@
 name: Set up project
-description: Install Poetry, Python and project dependencies (optionally the Playwright browser).
+description: Install Poetry, Python and project dependencies, and optionally Playwright browsers.
 
 inputs:
   python-version:
     description: Python version to install.
     default: "3.13"
   browsers:
-    description: Install Playwright Chromium and its system dependencies ("true"/"false").
-    default: "false"
+    description: Space-separated Playwright browsers to install with system dependencies (chromium firefox webkit). Empty for none.
+    default: ""
 
 runs:
   using: composite
@@ -25,7 +25,11 @@ runs:
       shell: bash
       run: poetry install --no-interaction
 
-    - name: Install Playwright Chromium
-      if: inputs.browsers == 'true'
+    - name: Install Playwright browsers
+      if: inputs.browsers != ''
       shell: bash
-      run: poetry run playwright install --with-deps chromium
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        read -ra browser_list <<< "$BROWSERS"
+        poetry run playwright install --with-deps "${browser_list[@]}"

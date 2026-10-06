@@ -14,6 +14,7 @@ from dotenv import dotenv_values
 from core.errors import ConfigError
 
 LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
+BROWSERS = frozenset({"chromium", "firefox", "webkit"})
 DEFAULT_HTTP_TIMEOUT_SECONDS = 30.0
 
 
@@ -47,6 +48,7 @@ class FrameworkSettings:
     http_timeout_seconds: float = DEFAULT_HTTP_TIMEOUT_SECONDS
     playwright_headless: bool = True
     playwright_launch_args: tuple[str, ...] = ()
+    playwright_browser: str = "chromium"
 
     def validate(self) -> None:
         """
@@ -61,6 +63,8 @@ class FrameworkSettings:
                 raise ConfigError(f"{key_name} must be one of {sorted(LOG_LEVELS)}, got: {level}")
         if self.http_timeout_seconds <= 0:
             raise ConfigError("HTTP_TIMEOUT_SECONDS must be positive.")
+        if self.playwright_browser not in BROWSERS:
+            raise ConfigError(f"PLAYWRIGHT_BROWSER must be one of {sorted(BROWSERS)}, got: {self.playwright_browser}")
 
     def resolve_oauth_client(self, client_name: str | None = None) -> tuple[str, OAuthClientConfig]:
         """
@@ -292,6 +296,7 @@ def load_settings(env_file_path: Path | None, environ: Mapping[str, str] | None 
         http_timeout_seconds=_parse_float(raw_values, "HTTP_TIMEOUT_SECONDS", DEFAULT_HTTP_TIMEOUT_SECONDS),
         playwright_headless=_parse_bool(raw_values, "PLAYWRIGHT_HEADLESS", True),
         playwright_launch_args=parse_launch_args(raw_values.get("PLAYWRIGHT_LAUNCH_ARGS")),
+        playwright_browser=raw_values.get("PLAYWRIGHT_BROWSER", "chromium").strip().lower(),
     )
 
     settings.validate()

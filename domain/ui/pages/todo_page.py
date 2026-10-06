@@ -4,6 +4,8 @@ Page object for the Playwright TodoMVC demo app.
 
 from __future__ import annotations
 
+import uuid
+
 from playwright.sync_api import Locator
 
 from adapters.playwright_adapter import PlaywrightAdapter
@@ -15,6 +17,7 @@ class TodoPage:
     """
 
     PATH = "/todomvc/"
+    STORAGE_KEY = "react-todos"
 
     def __init__(self, adapter: PlaywrightAdapter) -> None:
         """
@@ -23,6 +26,17 @@ class TodoPage:
         :param adapter: Mandatory, Playwright adapter.
         """
         self.adapter = adapter
+
+    def seed(self, titles: list[str]) -> TodoPage:
+        """
+        Pre-load items through the app's localStorage instead of the UI. Call before `open()`.
+
+        :param titles: Mandatory, Item titles, all active.
+        :return: Self, for chaining.
+        """
+        items = [{"id": str(uuid.uuid4()), "title": title, "completed": False} for title in titles]
+        self.adapter.seed_local_storage(self.STORAGE_KEY, items)
+        return self
 
     def open(self) -> TodoPage:
         """

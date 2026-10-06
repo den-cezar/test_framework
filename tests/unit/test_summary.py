@@ -9,6 +9,44 @@ def test_passing_run() -> None:
     assert markdown.startswith("### Unit tests: PASSED")
     assert "| 4 | 3 | 0 | 0 | 1 | 0 | 0 | 1.2s |" in markdown
     assert "Failures" not in markdown
+    assert "rerun" not in markdown
+
+
+def test_exact_markdown_layout() -> None:
+    markdown = render_markdown(
+        RunSummary(title="T", counts={"passed": 1, "failed": 1}, failures=[("a.py::t", "boom")], duration_seconds=2)
+    )
+
+    assert markdown == "\n".join(
+        [
+            "### T: FAILED",
+            "",
+            "| Total | Passed | Failed | Error | Skipped | Xfailed | Xpassed | Duration |",
+            "|---|---|---|---|---|---|---|---|",
+            "| 2 | 1 | 1 | 0 | 0 | 0 | 0 | 2.0s |",
+            "",
+            "<details open><summary>Failures (1)</summary>",
+            "",
+            "| Test | Error |",
+            "|---|---|",
+            "| `a.py::t` | boom |",
+            "",
+            "</details>",
+            "",
+        ]
+    )
+
+
+def test_flaky_tests_are_listed() -> None:
+    markdown = render_markdown(
+        RunSummary(
+            title="E2E", counts={"passed": 2}, failures=[], duration_seconds=1, flaky=["t.py::test_a", "t.py::test_b"]
+        )
+    )
+
+    assert markdown.startswith("### E2E: PASSED")
+    assert "Passed only after a rerun (2)" in markdown
+    assert "- `t.py::test_b`" in markdown
 
 
 def test_failures_are_listed_and_escaped() -> None:

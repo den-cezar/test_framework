@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from core.config.settings import load_settings, parse_launch_args, resolve_env_file
+from core.config.settings import OAuthClientConfig, load_settings, parse_launch_args, resolve_env_file
 from core.errors import ConfigError
 from tests.unit.conftest import BASE_ENV
 
@@ -26,6 +26,7 @@ def test_optional_values_are_parsed(write_env: Callable[..., Path]) -> None:
             HTTP_TIMEOUT_SECONDS="5.5",
             PLAYWRIGHT_HEADLESS="false",
             PLAYWRIGHT_LAUNCH_ARGS="--no-sandbox, ,--disable-gpu",
+            PLAYWRIGHT_BROWSER=" Firefox ",
             LOG_CONSOLE_LEVEL="warning",
         ),
         environ={},
@@ -34,6 +35,7 @@ def test_optional_values_are_parsed(write_env: Callable[..., Path]) -> None:
     assert settings.http_timeout_seconds == 5.5
     assert settings.playwright_headless is False
     assert settings.playwright_launch_args == ("--no-sandbox", "--disable-gpu")
+    assert settings.playwright_browser == "firefox"
     assert settings.log_console_level == "WARNING"
 
 
@@ -65,6 +67,7 @@ def test_legacy_and_default_clients_are_loaded(write_env: Callable[..., Path]) -
         ({"HTTP_TIMEOUT_SECONDS": "soon"}, "HTTP_TIMEOUT_SECONDS"),
         ({"HTTP_TIMEOUT_SECONDS": "0"}, "HTTP_TIMEOUT_SECONDS"),
         ({"PLAYWRIGHT_HEADLESS": "maybe"}, "PLAYWRIGHT_HEADLESS"),
+        ({"PLAYWRIGHT_BROWSER": "edge"}, "PLAYWRIGHT_BROWSER"),
         ({"OAUTH_CLIENT_NAME_B": "CLIENT_A", "OAUTH_CLIENT_ID_B": "x", "OAUTH_CLIENT_SECRET_B": "y"}, "Duplicate"),
     ],
 )
@@ -87,6 +90,27 @@ def test_environment_overrides_file_values(write_env: Callable[..., Path]) -> No
 
     assert settings.api_base_url == "https://ci.example.test"
     assert settings.oauth_clients["client_a"].client_secret == "from-secret"
+
+
+def test_process_environment_is_used_by_default(
+    write_env: Callable[..., Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("UI_BASE_URL", "https://from-process.example.test")
+
+    assert load_settings(write_env()).ui_base_url == "https://from-process.example.test"
+
+
+def test_default_client_keeps_its_scope(write_env: Callable[..., Path]) -> None:
+    settings = load_settings(
+        write_env(OAUTH_CLIENT_ID="d-id", OAUTH_CLIENT_SECRET="d-secret", OAUTH_SCOPE="d-scope"), environ={}
+    )
+
+    assert settings.oauth_clients["default"] == OAuthClientConfig("d-id", "d-secret", "d-scope")
+
+
+def test_default_client_requires_both_id_and_secret(write_env: Callable[..., Path]) -> None:
+    with pytest.raises(ConfigError, match="Both OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET"):
+        load_settings(write_env(OAUTH_CLIENT_ID="only-id"), environ={})
 
 
 def test_empty_environment_values_do_not_override(write_env: Callable[..., Path]) -> None:

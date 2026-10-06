@@ -1,0 +1,21 @@
+{
+  "API-OAUTH-CLIENTS-0001": "Every configured OAuth client can obtain an access token",
+  "API-OAUTH-CLIENTS-0002": "Access tokens are reused from the shared cache",
+  "API-IDENTITY-0001": "The protected API identifies the calling client from its token",
+  "API-PUBLIC-HEALTH-0001": "The public status endpoint reports a known service status",
+  "API-CONTRACT-0001": "Identity claims response matches the contract and contains the required claims",
+  "API-CONTRACT-0002": "Status response matches the Statuspage contract",
+  "API-AUTH-NEG-0001": "The protected API rejects missing, malformed and tampered tokens",
+  "API-AUTH-NEG-0002": "The identity provider rejects an invalid client secret",
+  "API-AUTH-NEG-0003": "The identity provider rejects an unknown scope",
+  "UI-TODO-0001": "The todo app opens with an input for new items",
+  "UI-TODO-0002": "Added items are listed in order with the remaining count",
+  "UI-TODO-0003": "Active and Completed filters split items correctly",
+  "UI-MOCK-0001": "The fruit list renders exactly the data returned by the API",
+  "UI-MOCK-0002": "Items added to the real API response are rendered",
+  "UI-MOCK-0003": "A failing fruits API leaves the page usable without a list",
+  "UI-MOCK-0004": "A slow fruits API still renders the list",
+  "UI-A11Y-0001": "The todo app has no new serious or critical accessibility violations",
+  "UI-A11Y-0002": "The fruit list page has no new serious or critical accessibility violations",
+  "HYBRID-0001": "Data fetched through the API is displayed correctly in the UI"
+}

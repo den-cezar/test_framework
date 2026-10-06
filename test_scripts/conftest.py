@@ -23,12 +23,49 @@ from core.config.settings import FrameworkSettings, load_settings, resolve_env_f
 from core.logging.logger import Logger
 from domain.api.api_service import ApiService
 from domain.ui.ui_service import UiService
+from test_scripts.utils.test_data import load_json_file
 
 FRAMEWORK_ROOT = Path(__file__).resolve().parents[1]
+TEST_SCRIPTS_DIR = Path(__file__).resolve().parent
 DEFAULT_ENV_FILE = FRAMEWORK_ROOT.joinpath(".env.dev")
 CALL_REPORT_KEY = pytest.StashKey[pytest.TestReport]()
 
 logger = Logger.get_logger("Fixtures")
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """
+    Enforce traceability before marker deselection: every e2e test maps to a known requirement,
+    and every quarantined test states why. Scenario ids are copied into JUnit/report properties.
+
+    :param config: Mandatory, Pytest config.
+    :param items: Mandatory, Collected items (all of them, before -m/-k deselection).
+    """
+    catalog = load_json_file("requirements.json")
+    problems: list[str] = []
+    covered: set[str] = set()
+    for item in items:
+        if not item.path.is_relative_to(TEST_SCRIPTS_DIR):
+            continue
+        scenario = item.get_closest_marker("scenario")
+        if scenario is None or not scenario.args:
+            problems.append(f"{item.nodeid}: missing @pytest.mark.scenario('<ID>')")
+            continue
+        scenario_id = str(scenario.args[0])
+        if scenario_id not in catalog:
+            problems.append(f"{item.nodeid}: scenario {scenario_id} is not in test_scripts/data/requirements.json")
+        covered.add(scenario_id)
+        item.user_properties.append(("scenario", scenario_id))
+
+        quarantine = item.get_closest_marker("quarantine")
+        if quarantine is not None and not quarantine.kwargs.get("reason"):
+            problems.append(f"{item.nodeid}: quarantine needs reason='<issue link and cause>'")
+
+    if config.getoption("--require-full-traceability"):
+        problems += [f"{sid}: no test covers this requirement" for sid in sorted(catalog.keys() - covered)]
+    if problems:
+        raise pytest.UsageError("Traceability check failed:\n  " + "\n  ".join(problems))
 
 
 @pytest.fixture(scope="session")
@@ -162,15 +199,16 @@ def api_service(http_client: HttpClient) -> ApiService:
 @pytest.fixture(scope="session")
 def browser(framework_settings: FrameworkSettings) -> Iterator[Browser]:
     """
-    Launch one Chromium instance per worker.
+    Launch one browser per worker; the engine comes from PLAYWRIGHT_BROWSER.
 
     :param framework_settings: Mandatory, Framework settings.
     :return: Playwright Browser.
     """
+    engine = framework_settings.playwright_browser
+    # Launch args are Chromium command-line switches; Firefox and WebKit reject them.
+    args = list(framework_settings.playwright_launch_args) if engine == "chromium" else []
     with sync_playwright() as playwright:
-        browser_value = playwright.chromium.launch(
-            headless=framework_settings.playwright_headless, args=list(framework_settings.playwright_launch_args)
-        )
+        browser_value = getattr(playwright, engine).launch(headless=framework_settings.playwright_headless, args=args)
         yield browser_value
         browser_value.close()
 

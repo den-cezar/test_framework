@@ -1,0 +1,7 @@
+{
+  "_comment": "Serious/critical axe rules accepted on third-party demo pages. Remove entries once fixed.",
+  "known_violations": {
+    "todomvc": ["color-contrast"],
+    "api-mocking": ["color-contrast"]
+  }
+}

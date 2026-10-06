@@ -1,3 +1,4 @@
+import dataclasses
 from urllib.parse import parse_qs
 
 import httpx
@@ -6,7 +7,7 @@ import pytest
 from adapters.http_client import HttpClient
 from core.auth.oauth_client import OAuthClient
 from core.auth.token_cache import SharedTokenCache
-from core.config.settings import FrameworkSettings
+from core.config.settings import FrameworkSettings, OAuthClientConfig
 from core.errors import AuthError
 
 
@@ -53,11 +54,24 @@ def test_scope_override_uses_separate_cache_entry(settings: FrameworkSettings) -
     assert parse_qs(requests[1].content.decode())["scope"] == ["other"]
 
 
+def test_each_client_gets_its_own_cache_entry(settings: FrameworkSettings) -> None:
+    second = OAuthClientConfig(client_id="id-b", client_secret="secret-b", scope="api")
+    two_clients = dataclasses.replace(settings, oauth_clients={**settings.oauth_clients, "client_b": second})
+    requests: list[httpx.Request] = []
+    client = _oauth_client(two_clients, _token_endpoint(requests))
+
+    client.get_access_token(client_name="client_a")
+    client.get_access_token(client_name="client_b")
+
+    assert [parse_qs(r.content.decode())["client_id"] for r in requests] == [["id-a"], ["id-b"]]
+
+
 @pytest.mark.parametrize(
     ("status_code", "body", "message"),
     [
         (401, {"error": "invalid_client"}, "Token request failed: 401"),
         (200, {"access_token": "", "expires_in": 3600}, "Invalid token response"),
+        (200, {"expires_in": 3600}, "Invalid token response"),
         (200, {"access_token": "abc", "expires_in": 0}, "Invalid token response"),
     ],
 )
