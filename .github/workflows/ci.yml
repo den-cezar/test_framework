@@ -14,14 +14,32 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint and type-check
+    name: Lint, type-check, traceability
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup
-      - name: Ruff lint, format check, mypy
+      - name: Ruff, format check, mypy, requirement traceability
         run: poetry run poe check
+
+  workflows:
+    name: Workflow lint (actionlint, zizmor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: actionlint
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
+      - uses: ./.github/actions/setup
+      - name: zizmor
+        run: poetry run zizmor --format=github .github
 
   unit:
     name: Unit tests (Python ${{ matrix.python-version }})
@@ -31,13 +49,17 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.13"]
+    env:
+      PYTHON_VERSION: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run unit tests
+      - name: Run unit and property-based tests
         env:
           TEST_SUMMARY_TITLE: Unit tests (Python ${{ matrix.python-version }})
         run: >-
@@ -49,7 +71,7 @@ jobs:
       - name: Add coverage to job summary
         if: always()
         run: |
-          echo "#### Coverage (Python ${{ matrix.python-version }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "#### Coverage (Python $PYTHON_VERSION)" >> "$GITHUB_STEP_SUMMARY"
           poetry run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Upload reports
@@ -59,3 +81,33 @@ jobs:
           name: unit-reports-py${{ matrix.python-version }}
           path: reports/
           retention-days: 14
+
+  mutation:
+    name: Mutation testing (core/)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Run mutmut and enforce the minimum score
+        run: poetry run poe mutation
+
+  security:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: pip-audit (known vulnerabilities in installed packages)
+        run: poetry run poe audit
+      - name: Dependency review (new vulnerable or disallowed dependencies in this PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never

@@ -23,7 +23,7 @@ def test_sanitize_test_name() -> None:
 
 
 def test_screenshot_and_trace_go_to_the_test_directory(tmp_path: Path) -> None:
-    manager = ArtifactManager(tmp_path, "UTC")
+    manager = ArtifactManager(tmp_path.joinpath("not", "created", "yet"), "UTC")
     page = FakePage()
 
     path, png = manager.capture_screenshot(page, "suite/test_a.py::test_b")
@@ -31,7 +31,8 @@ def test_screenshot_and_trace_go_to_the_test_directory(tmp_path: Path) -> None:
 
     assert png == b"png"
     assert path.read_bytes() == b"png"
-    assert path.parent == trace.parent == tmp_path.joinpath("suite_test_a.py__test_b")
+    assert path.parent == trace.parent == tmp_path.joinpath("not", "created", "yet", "suite_test_a.py__test_b")
+    assert trace.parent.is_dir()
     assert path.name.endswith("_error_screenshot.png")
     assert trace.name.endswith("_trace.zip")
 

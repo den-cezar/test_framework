@@ -4,6 +4,9 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    # Let new releases age a week before adopting them (supply-chain safety).
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       python-minor-and-patch:
@@ -13,6 +16,15 @@ updates:
     directories: ["/", "/.github/actions/*"]
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns: ["*"]
+
+  - package-ecosystem: devcontainers
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7

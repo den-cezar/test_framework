@@ -11,8 +11,9 @@ pytestmark = [pytest.mark.api, pytest.mark.regression]
 
 
 @pytest.mark.smoke
+@pytest.mark.scenario("API-IDENTITY-0001")
 def test_identity_endpoint_echoes_token_claims(api_service: ApiService, framework_settings: FrameworkSettings) -> None:
-    """Scenarios: API-IDENTITY-0001"""
+    """The protected endpoint sees the client id and scope the token was issued for."""
     client_name, client_config = framework_settings.resolve_oauth_client()
 
     claims = api_service.get_identity_claims(client_name)

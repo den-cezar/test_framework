@@ -22,6 +22,7 @@ class RunSummary:
     counts: Mapping[str, int]
     failures: Sequence[tuple[str, str]]
     duration_seconds: float
+    flaky: Sequence[str] = ()
 
     @property
     def total(self) -> int:
@@ -43,7 +44,7 @@ def render_markdown(summary: RunSummary) -> str:
     """
     status = "PASSED" if summary.succeeded else "FAILED"
     lines = [
-        f"### {_escape(summary.title)}: {status}",
+        f"### {escape_cell(summary.title)}: {status}",
         "",
         "| Total | " + " | ".join(outcome.capitalize() for outcome in OUTCOMES) + " | Duration |",
         "|---" * (len(OUTCOMES) + 2) + "|",
@@ -60,17 +61,27 @@ def render_markdown(summary: RunSummary) -> str:
             "",
             "| Test | Error |",
             "|---|---|",
-            *(f"| `{_escape(node_id)}` | {_escape(message)} |" for node_id, message in shown),
+            *(f"| `{escape_cell(node_id)}` | {escape_cell(message)} |" for node_id, message in shown),
             "",
         ]
         if len(summary.failures) > len(shown):
             lines += [f"_{len(summary.failures) - len(shown)} more not shown; see the HTML report._", ""]
         lines += ["</details>", ""]
 
+    if summary.flaky:
+        lines += [
+            f"#### Passed only after a rerun ({len(summary.flaky)})",
+            "",
+            "Treat as flaky: open a Flaky test issue, or quarantine with a reason.",
+            "",
+            *(f"- `{escape_cell(node_id)}`" for node_id in summary.flaky),
+            "",
+        ]
+
     return "\n".join(lines)
 
 
-def _escape(text: str) -> str:
+def escape_cell(text: str) -> str:
     """
     Make text safe for a single Markdown table cell.
 

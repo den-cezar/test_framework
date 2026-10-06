@@ -1,6 +1,6 @@
 # New Hybrid API/UI Test Framework
 
-A reference architecture for API and UI test automation: layered modules, parallel-safe execution, CI quality gates and run reports.
+A reference architecture for API and UI test automation: layered modules, parallel-safe execution, CI quality gates and run reports. The [test strategy](docs/TEST_STRATEGY.md) and [architecture decision records](docs/adr/) explain the reasoning.
 
 ## Architecture
 
@@ -18,6 +18,12 @@ flowchart LR
 
 ## Setup
 
+### Dev container (recommended)
+
+Open the repository in VS Code and choose **Reopen in Container**, or open it in GitHub Codespaces. [.devcontainer/](.devcontainer/) installs Python 3.13, Poetry, all dependencies, Chromium, Firefox and WebKit, the pre-commit hooks, and creates `.env.dev` from `.env.example`. Browser downloads are cached in a named volume, and port 9323 is forwarded for the Playwright trace viewer (`poe show-trace <zip>`).
+
+### Local
+
 Requires Python 3.11+ and Poetry 2.x.
 
 ```sh
@@ -33,6 +39,21 @@ Settings are loaded by [core/config/settings.py](core/config/settings.py).
 - Env file: `--env-file <path>`, else the `ENV_FILE` variable, else `.env.dev` if it exists.
 - Non-empty process environment variables override env-file values. CI relies on this (see below).
 - See [.env.example](.env.example) for all keys. OAuth clients are declared as `OAUTH_CLIENT_NAME_<X>`, `OAUTH_CLIENT_ID_<X>`, `OAUTH_CLIENT_SECRET_<X>`, `OAUTH_SCOPE_<X>`.
+- `PLAYWRIGHT_BROWSER` selects `chromium` (default), `firefox` or `webkit`.
+
+## What is tested
+
+| Type | Example | Marker |
+|---|---|---|
+| Contract | API responses parsed into strict pydantic models ([domain/api/models.py](domain/api/models.py)) | `contract` |
+| Negative / security | Missing, malformed, wrong-scheme and tampered tokens; invalid client secret and scope | `security` |
+| UI with mocked network | Mocked data, injected items, HTTP 500/503, added latency (`page.route`) | `network` |
+| Accessibility | axe-core scan; new serious/critical violations fail, known ones are [baselined](test_scripts/data/a11y_baseline.json) | `a11y` |
+| Hybrid | Data from the protected API rendered by the UI | `hybrid` |
+| Cross-browser | Any UI test on Chromium, Firefox or WebKit | `PLAYWRIGHT_BROWSER` |
+| Framework | Unit, property-based (Hypothesis) and mutation tests (mutmut) on `core/` | `tests/unit/` |
+
+Every e2e test declares `@pytest.mark.scenario("ID")` from [requirements.json](test_scripts/data/requirements.json). Collection fails for missing or unknown ids, and `poe traceability` also fails when a requirement has no test.
 
 ## Running tests
 
@@ -40,20 +61,24 @@ Run tasks with `poetry run poe <task>`; extra arguments are passed to pytest.
 
 | Task | Runs |
 |---|---|
-| `test-unit` | Framework unit tests with coverage (fails under 90%) |
+| `test-unit` | Framework unit and property tests with coverage (fails under 90%) |
 | `test-smoke` | `-m smoke` |
 | `test-regression` | `-m regression`, parallel |
 | `test-api` / `test-ui` | `-m api` / `-m ui` |
 | `test-e2e` | everything in `test_scripts/` |
-| `check` | ruff lint, ruff format check, mypy |
+| `check` | ruff lint, format check, mypy, traceability |
+| `mutation` | mutmut on `core/`, fails under 80% |
+| `audit` | pip-audit for known vulnerabilities |
+| `lint-workflows` | zizmor on `.github/` |
+| `install-all-browsers` | Chromium, Firefox and WebKit |
 
-Markers: `api`, `ui`, `smoke`, `regression` (unknown markers fail the run).
+Markers: `api`, `ui`, `hybrid`, `contract`, `security`, `network`, `a11y`, `smoke`, `regression`, `scenario(id)`, `quarantine(reason)`. Unknown markers fail the run.
 
 Examples:
 
 ```sh
 poetry run poe test-api --env-file .env.stage -k identity
-poetry run poe test-e2e -n auto
+PLAYWRIGHT_BROWSER=webkit poetry run poe test-ui -n auto
 poetry run pytest "test_scripts/ui/test_todo_app.py::test_todo_app_opens"
 ```
 
@@ -63,21 +88,31 @@ poetry run pytest "test_scripts/ui/test_todo_app.py::test_todo_app_opens"
 |---|---|
 | JUnit XML | `--junitxml=reports/junit.xml` |
 | HTML report | `--html=reports/report.html --self-contained-html`; UI failures embed a screenshot |
-| GitHub job summary | Written automatically when `GITHUB_STEP_SUMMARY` is set: counts, duration, failed tests |
-| Logs | `.artifacts/<run>/<worker>.log`, including HTTP request/response lines |
-| UI failure artifacts | `.artifacts/<run>/<test id>/`: screenshot and Playwright trace (`playwright show-trace <zip>`) |
+| GitHub job summary | Written automatically when `GITHUB_STEP_SUMMARY` is set: counts, duration, failed tests, flaky tests, traceability matrix |
+| Traceability matrix | `--traceability-report <file>`: requirement, tests, PASSED / FAILED / SKIPPED / NOT RUN |
+| Run history | GitHub Pages: last 50 e2e s only. To add an environment, create it in GitHub and add its name to the `environment` input options.
 
-In `e2e.yml`, reports and logs are uploaded on every run. When a run fails, traces are uploaded as a separate `playwright-traces-<run>` artifact, and the job summary links to it.
+The run history is pushed to the `gh-pages` branch (created on the first run). Enable Pages once under Settings > Pages > Deploy from branch `gh-pages`
+| Logs | `.artifacts/<run>/<worker>.log`, including HTTP request/response lines |
+| UI failure artifacts | `.artifacts/<run>/<test id>/`: screenshot and Playwright trace (`poe show-trace <zip>`) |
+
+In `e2e.yml`, reports and logs are uploaded on every run. When a run fails, traces are uploaded as a separate `playwright-traces-<browser>-<run>` artifact, and the job summary links to it.
+
+## Flaky tests
+
+e2e runs rerun failed tests (default 2); tests that pass only on a rerun are listed as flaky in the job summary. A test that stays flaky gets `@pytest.mark.quarantine(reason="<issue link> <cause>")`: it then runs in a separate non-blocking step. The reason is mandatory. See [ADR 0006](docs/adr/0006-flaky-test-policy.md).
 
 ## CI
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| [ci.yml](.github/workflows/ci.yml) | pull request, push to `main` | `lint` job (`poe check`) and `unit` job on Python 3.11 and 3.13 with coverage in the job summary |
-| [e2e.yml](.github/workflows/e2e.yml) | manual dispatch (nightly schedule present but commented out) | Runs a suite (`regression`, `smoke`, `api`, `ui`, `all`, or a `custom` marker expression) against a path or single node id |
-| [dependabot.yml](.github/dependabot.yml) | monthly | Python dependencies (minor/patch grouped) and GitHub Actions |
+| [ci.yml](.github/workflows/ci.yml) | pull request, push to `main` | `lint` (ruff, mypy, traceability), `workflows` (actionlint, zizmor), `unit` (Python 3.11 and 3.13, coverage), `mutation` (score gate), `security` (pip-audit, dependency review) |
+| [codeql.yml](.github/workflows/codeql.yml) | pull request, push to `main` | CodeQL for Python and GitHub Actions |
+| [e2e.yml](.github/workflows/e2e.yml) | manual dispatch (nightly schedule present but commented out) | Runs a suite (`regression`, `smoke`, `api`, `ui`, `all`, or a `custom` marker expression) against a path or single node id, on one browser or all three; quarantined tests in a non-blocking step; publishes the run history to GitHub Pages |
+| [devcontainer.yml](.github/workflows/devcontainer.yml) | PRs touching `.devcontainer/` or dependencies | Builds the dev container and runs `poe check` and `poe test-unit` inside it |
+| [dependabot.yml](.github/dependabot.yml) | monthly, 7-day cooldown | Python dependencies (minor/patch grouped), GitHub Actions, dev container features |
 
-To make `lint` and `unit` quality gates, mark them as required status checks in the `main` branch protection rule.
+First-party actions (`actions/*`, `github/*`) are pinned to version tags; third-party actions are pinned to commit SHAs. Dependabot keeps both current. Pre-commit runs ruff, gitleaks and zizmor. To make the CI jobs quality gates, mark them as required status checks in the `main` branch protection rule.
 
 ### GitHub environment for e2e.yml
 
@@ -95,17 +130,19 @@ The workflow passes these to the test step only. To add an environment, create i
 ## Project layout
 
 ```
-core/           config, auth (OAuth + shared token cache), logging, artifacts, reporting, errors, utils
-adapters/       HttpClient (httpx), PlaywrightAdapter
-domain/         ApiService, UiService, ui/pages/ page objects
-test_scripts/   e2e tests, fixtures (conftest.py), test data
-tests/unit/     framework unit tests
+core/           config, auth (OAuth + shared token cache), logging, artifacts, reporting (summary, traceability), errors, utils
+adapters/       HttpClient (httpx), PlaywrightAdapter (network control, axe scan)
+domain/         ApiService + contract models, UiService, ui/pages/ page objects
+test_scripts/   e2e tests (api/, ui/, hybrid/), fixtures (conftest.py), test data and requirements catalog
+tests/unit/     framework unit and property-based tests
+tools/          CI helpers: mutation score, report history
+docs/           test strategy and ADRs
 ```
 
 ## Contributing
 
 - **Issues:** open one with a template: [bug report](.github/ISSUE_TEMPLATE/bug_report.yml), [flaky test](.github/ISSUE_TEMPLATE/flaky_test.yml) or [feature request](.github/ISSUE_TEMPLATE/feature_request.yml).
-- **Pull requests:** fill in the [PR template](.github/pull_request_template.md). The `lint` and `unit` checks must pass.
+- **Pull requests:** fill in the [PR template](.github/pull_request_template.md). All CI checks must pass.
 - **Conduct:** everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
