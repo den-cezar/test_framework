@@ -69,10 +69,10 @@ class SharedTokenCache:
             raw_data = self._read_cache()
             cached = _parse_record(raw_data.get(cache_key))
             if cached and not cached.is_expired():
-                logger.debug("Token cache hit for %s.", cache_key)
+                logger.debug("Token cache hit.")
                 return cached
 
-            logger.debug("Token cache miss for %s; requesting a new token.", cache_key)
+            logger.debug("Token cache miss; requesting a new token.")
             record = factory()
             raw_data[cache_key] = {"access_token": record.access_token, "expires_at": record.expires_at}
             self._write_cache(raw_data)
