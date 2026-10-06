@@ -2,7 +2,8 @@
 # Runs once after the container is created. Safe to re-run.
 set -euo pipefail
 
-# Named volumes are created root-owned; the browsers and Poetry caches must belong to the dev user.
+# Named volumes are created root-owned, and so is their parent ~/.cache; hand both to the dev user.
+sudo chown "$(id -u):$(id -g)" "$HOME/.cache"
 sudo chown -R "$(id -u):$(id -g)" "$HOME/.cache/ms-playwright" "$HOME/.cache/pypoetry"
 
 pipx install --force poetry==2.5.1

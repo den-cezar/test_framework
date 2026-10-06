@@ -91,9 +91,9 @@ markers = [
 ]
 
 [tool.mutmut]
-paths_to_mutate = ["core/"]
-tests_dir = ["tests/unit/"]
-also_copy = ["conftest.py", "pyproject.toml", "adapters/"]
+source_paths = ["core/"]
+pytest_add_cli_args_test_selection = ["tests/unit/"]
+also_copy = ["conftest.py", "pyproject.toml", "adapters/", "tools/"]
 
 [tool.coverage.run]
 # Unit-test scope; domain/ and the Playwright adapter are exercised by the e2e suites.

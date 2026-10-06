@@ -165,6 +165,7 @@ jobs:
             echo "#### Playwright traces"
             echo "[Download traces]($ARTIFACT_URL), unzip, then open a \`*_trace.zip\` at https://trace.playwright.dev or with \`poetry run playwright show-trace <zip>\`."
             echo "Failed tests with a trace:"
+            # shellcheck disable=SC2016 # backticks are literal Markdown, not command substitution
             find .artifacts -name '*_trace.zip' | sed -E 's|^\.artifacts/[^/]+/([^/]+)/.*|- `\1`|' | sort -u
           } >> "$GITHUB_STEP_SUMMARY"
 
