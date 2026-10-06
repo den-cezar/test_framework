@@ -12,53 +12,61 @@ from core.auth.oauth_client import OAuthClient
 from core.config.settings import FrameworkSettings
 from core.logging.logger import Logger
 
+logger = Logger.get_logger("HttpClient")
+MAX_LOGGED_BODY_CHARS = 1000
+
+
+def _log_request(request: httpx.Request) -> None:
+    """Log the outgoing request line. Headers are not logged because they carry the bearer token."""
+    logger.info("--> %s %s", request.method, request.url)
+
+
+def _log_response(response: httpx.Response) -> None:
+    """Log the response status and a truncated body."""
+    response.read()
+    logger.info("<-- %s %s %s", response.status_code, response.request.method, response.request.url)
+    logger.debug("Response body: %s", response.text[:MAX_LOGGED_BODY_CHARS])
+
 
 class HttpClient:
     """
-    Simple HTTP client with OAuth authentication.
+    HTTP client with a pooled connection, OAuth bearer auth and request/response logging.
     """
 
-    def __init__(self, settings: FrameworkSettings, oauth_client: OAuthClient) -> None:
+    def __init__(
+        self, settings: FrameworkSettings, oauth_client: OAuthClient, transport: httpx.BaseTransport | None = None
+    ) -> None:
         """
         Initialize the HTTP client.
 
         :param settings: Mandatory, Framework settings.
         :param oauth_client: Mandatory, OAuth client.
+        :param transport: Optional, Custom transport (e.g. httpx.MockTransport in unit tests).
         """
-        logger = Logger.get_logger("HttpClient")
-        logger.debug("Initializing HTTP client.")
-
-        if not isinstance(settings, FrameworkSettings):
-            raise ValueError("settings must be a FrameworkSettings instance.")
-        if not isinstance(oauth_client, OAuthClient):
-            raise ValueError("oauth_client must be an OAuthClient instance.")
-
-        self.settings = settings
         self.oauth_client = oauth_client
+        self._client = httpx.Client(
+            base_url=settings.api_base_url,
+            timeout=settings.http_timeout_seconds,
+            transport=transport,
+            event_hooks={"request": [_log_request], "response": [_log_response]},
+        )
 
-    def request(self, method_name: str, path_value: str, json_body: dict[str, Any] | None = None) -> httpx.Response:
+    def request(
+        self, method_name: str, path_value: str, json_body: dict[str, Any] | None = None, client_name: str | None = None
+    ) -> httpx.Response:
         """
-        Execute an HTTP request with OAuth token.
+        Execute a request against API_BASE_URL with an OAuth bearer token.
 
         :param method_name: Mandatory, HTTP method name.
-        :param path_value: Mandatory, API path.
+        :param path_value: Mandatory, Path relative to API_BASE_URL.
         :param json_body: Optional, JSON body payload.
+        :param client_name: Optional, OAuth client to authenticate as.
         :return: httpx.Response instance.
         """
-        logger = Logger.get_logger("HttpClient")
-        logger.debug("Executing HTTP request.")
-
-        if not isinstance(method_name, str) or not method_name:
-            raise ValueError("method_name must be a non-empty string.")
-        if not isinstance(path_value, str) or not path_value:
-            raise ValueError("path_value must be a non-empty string.")
-
-        access_token = self.oauth_client.get_access_token()
-        headers = {"Authorization": f"Bearer {access_token}"}
-        url_value = f"{self.settings.api_base_url.rstrip('/')}/{path_value.lstrip('/')}"
-
-        response = httpx.request(method_name.upper(), url_value, json=json_body, headers=headers, timeout=30)
-        return response
+        access_token = self.oauth_client.get_access_token(client_name=client_name)
+        return self._client.request(
+            method_name.upper(), path_value, json=json_body, headers={"Authorization": f"Bearer {access_token}"}
+        )
 
     def request_public(
         self,
@@ -68,21 +76,18 @@ class HttpClient:
         headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         """
-        Execute an HTTP request without OAuth.
+        Execute a request without OAuth.
 
         :param method_name: Mandatory, HTTP method name.
-        :param url_value: Mandatory, Absolute URL.
+        :param url_value: Mandatory, Absolute URL or path relative to API_BASE_URL.
         :param json_body: Optional, JSON body payload.
         :param headers: Optional, Extra headers.
         :return: httpx.Response instance.
         """
-        logger = Logger.get_logger("HttpClient")
-        logger.debug("Executing public HTTP request.")
+        return self._client.request(method_name.upper(), url_value, json=json_body, headers=headers)
 
-        if not isinstance(method_name, str) or not method_name:
-            raise ValueError("method_name must be a non-empty string.")
-        if not isinstance(url_value, str) or not url_value:
-            raise ValueError("url_value must be a non-empty string.")
-
-        response = httpx.request(method_name.upper(), url_value, json=json_body, headers=headers, timeout=30)
-        return response
+    def close(self) -> None:
+        """
+        Close the underlying connection pool.
+        """
+        self._client.close()

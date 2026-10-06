@@ -5,13 +5,14 @@ Domain service for API operations.
 from __future__ import annotations
 
 from adapters.http_client import HttpClient
-from core.logging.logger import Logger
 
 
 class ApiService:
     """
-    Domain API service wrapper.
+    Domain API service: business-level operations on top of the HTTP adapter.
     """
+
+    IDENTITY_PATH = "/api/test"
 
     def __init__(self, http_client: HttpClient) -> None:
         """
@@ -19,24 +20,18 @@ class ApiService:
 
         :param http_client: Mandatory, HTTP client adapter.
         """
-        logger = Logger.get_logger("ApiService")
-        logger.debug("Initializing ApiService.")
-
-        if not isinstance(http_client, HttpClient):
-            raise ValueError("http_client must be an HttpClient instance.")
         self.http_client = http_client
 
-    def health_check(self) -> int:
+    def get_identity_claims(self, client_name: str | None = None) -> dict[str, str]:
         """
-        Execute a health check endpoint.
+        Call the protected identity endpoint and return the token claims it echoes back.
 
-        :return: HTTP status code.
+        :param client_name: Optional, OAuth client to authenticate as.
+        :return: Mapping of claim type to value.
         """
-        logger = Logger.get_logger("ApiService")
-        logger.debug("Running API health check.")
-
-        response = self.http_client.request("GET", "/health")
-        return response.status_code
+        response = self.http_client.request("GET", self.IDENTITY_PATH, client_name=client_name)
+        response.raise_for_status()
+        return {str(claim["type"]): str(claim["value"]) for claim in response.json()}
 
     def public_health_check(self, url_value: str) -> int:
         """
@@ -45,8 +40,4 @@ class ApiService:
         :param url_value: Mandatory, Absolute URL.
         :return: HTTP status code.
         """
-        logger = Logger.get_logger("ApiService")
-        logger.debug("Running public API health check.")
-
-        response = self.http_client.request_public("GET", url_value)
-        return response.status_code
+        return self.http_client.request_public("GET", url_value).status_code

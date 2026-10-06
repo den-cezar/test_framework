@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and type-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Ruff lint, format check, mypy
+        run: poetry run poe check
+
+  unit:
+    name: Unit tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run unit tests
+        env:
+          TEST_SUMMARY_TITLE: Unit tests (Python ${{ matrix.python-version }})
+        run: >-
+          poetry run poe test-unit
+          --junitxml=reports/junit.xml
+          --html=reports/unit-report.html --self-contained-html
+          --cov-report=term-missing --cov-report=xml:reports/coverage.xml
+
+      - name: Add coverage to job summary
+        if: always()
+        run: |
+          echo "#### Coverage (Python ${{ matrix.python-version }})" >> "$GITHUB_STEP_SUMMARY"
+          poetry run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-reports-py${{ matrix.python-version }}
+          path: reports/
+          retention-days: 14

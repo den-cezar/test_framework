@@ -1,0 +1,45 @@
+name: Flaky test
+description: A test that passes and fails without code changes.
+labels: ["flaky"]
+body:
+  - type: input
+    id: node-id
+    attributes:
+      label: Test node id
+      placeholder: test_scripts/ui/test_todo_app.py::test_added_items_are_listed_in_order
+    validations:
+      required: true
+
+  - type: input
+    id: frequency
+    attributes:
+      label: How often it fails
+      placeholder: 2 of the last 10 nightly runs
+    validations:
+      required: true
+
+  - type: textarea
+    id: runs
+    attributes:
+      label: Failing CI runs
+      description: Links to failing runs. For UI tests, attach or link the `playwright-traces-<run>` artifact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Failure message
+      render: shell
+
+  - type: dropdown
+    id: suspected-cause
+    attributes:
+      label: Suspected cause
+      options:
+        - Not investigated yet
+        - Timing / missing wait in the test or page object
+        - Shared state between tests or xdist workers
+        - Test data collision
+        - Environment or third-party service instability
+        - Framework bug

@@ -1,0 +1,68 @@
+name: Bug report
+description: Something in the framework, a test, or CI does not work as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: For a test that passes and fails intermittently, use the **Flaky test** form instead.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Framework core (config, auth, logging, artifacts, reporting)
+        - API layer (HttpClient, ApiService)
+        - UI layer (Playwright adapter, page objects)
+        - Test suite (test_scripts)
+        - CI / workflows
+        - Documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: What you expected and what happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The exact command, and the env file or GitHub environment used (no secrets).
+      placeholder: poetry run poe test-api --env-file .env.dev -k identity
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output
+      description: Pytest failure output or the relevant lines from `.artifacts/<run>/<worker>.log`. Remove tokens and secrets.
+      render: shell
+
+  - type: input
+    id: ci-run
+    attributes:
+      label: CI run link
+      description: Link to the failing workflow run, if any.
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: macOS 15, Python 3.13.5, commit abc1234
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
