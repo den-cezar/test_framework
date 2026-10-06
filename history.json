@@ -1,0 +1,41 @@
+[
+  {
+    "run_number": 2,
+    "browser": "webkit",
+    "suite": "regression",
+    "date": "2026-10-06 12:45",
+    "total": 27,
+    "passed": 27,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 17.408,
+    "run_url": "https://github.com/den-cezar/test_framework/actions/runs/37465365657",
+    "report_path": "runs/2-webkit/report.html"
+  },
+  {
+    "run_number": 2,
+    "browser": "firefox",
+    "suite": "regression",
+    "date": "2026-10-06 12:45",
+    "total": 27,
+    "passed": 27,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 13.264,
+    "run_url": "https://github.com/den-cezar/test_framework/actions/runs/37465365657",
+    "report_path": "runs/2-firefox/report.html"
+  },
+  {
+    "run_number": 2,
+    "browser": "chromium",
+    "suite": "regression",
+    "date": "2026-10-06 12:45",
+    "total": 27,
+    "passed": 27,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 5.574,
+    "run_url": "https://github.com/den-cezar/test_framework/actions/runs/37465365657",
+    "report_path": "runs/2-chromium/report.html"
+  }
+]
