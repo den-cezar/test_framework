@@ -2,7 +2,7 @@ rules:
   # `uses: $/...` is valid on GitHub, but actionlint 1.7.12 rejects it; keep `./` until actionlint supports it.
   self-repository:
     disable: true
-  # Project choice: readable version tags (updated by Dependabot) instead of commit SHAs.
+  # Project choice: version tags for first-party actions; third-party actions are SHA-pinned by convention.
   unpinned-uses:
     config:
       policies:

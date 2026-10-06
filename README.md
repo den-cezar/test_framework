@@ -112,7 +112,7 @@ e2e runs rerun failed tests (default 2); tests that pass only on a rerun are lis
 | [devcontainer.yml](.github/workflows/devcontainer.yml) | PRs touching `.devcontainer/` or dependencies | Builds the dev container and runs `poe check` and `poe test-unit` inside it |
 | [dependabot.yml](.github/dependabot.yml) | monthly, 7-day cooldown | Python dependencies (minor/patch grouped), GitHub Actions, dev container features |
 
-Actions are pinned to version tags and kept current by Dependabot. Pre-commit runs ruff, gitleaks and zizmor. To make the CI jobs quality gates, mark them as required status checks in the `main` branch protection rule.
+First-party actions (`actions/*`, `github/*`) are pinned to version tags; third-party actions are pinned to commit SHAs. Dependabot keeps both current. Pre-commit runs ruff, gitleaks and zizmor. To make the CI jobs quality gates, mark them as required status checks in the `main` branch protection rule.
 
 ### GitHub environment for e2e.yml
 
